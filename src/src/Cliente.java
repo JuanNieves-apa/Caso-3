@@ -3,7 +3,7 @@ package src;
 import javax.crypto.Cipher;
 import javax.crypto.KeyAgreement;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.DHParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -13,64 +13,78 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PublicKey;
 
-public class Cliente {
-    public static void main(String[] args) {
-        String idUsuario = "user1";
-        String idPaquete = "pkg1";
+public class Cliente implements Runnable {
 
+    private final String idUsuario;
+    private final String idPaquete;
 
+    public Cliente(String idUsuario, String idPaquete) {
+        this.idUsuario = idUsuario;
+        this.idPaquete = idPaquete;
+    }
+
+    @Override
+    public void run() {
         try (Socket socket = new Socket("localhost", 12345);
              ObjectOutputStream salida = new ObjectOutputStream(socket.getOutputStream());
              ObjectInputStream entrada = new ObjectInputStream(socket.getInputStream())) {
 
-            // Paso 1: Recibir los parámetros DH del servidor
-            BigInteger p = (BigInteger) entrada.readObject();
-            BigInteger g = (BigInteger) entrada.readObject();
-            DHParameterSpec dhSpec = new DHParameterSpec(p, g);
-
-            // Paso 2: Generar el par de claves DH usando los parámetros recibidos
+            // Generación del par de claves DH y envío de la clave pública
             KeyPairGenerator keyPairGen = KeyPairGenerator.getInstance("DH");
-            keyPairGen.initialize(dhSpec);
+            keyPairGen.initialize(1024);
             KeyPair keyPair = keyPairGen.generateKeyPair();
-            
-            // Enviar clave pública al servidor
-            salida.writeObject(keyPair.getPublic());
+            salida.writeObject(keyPair.getPublic());  // Enviar clave pública del cliente
             salida.flush();
-            
-            // Paso 3: Recibir la clave pública del servidor y completar el acuerdo de clave
+
+            // Recibir la clave pública del servidor
             PublicKey clavePublicaServidor = (PublicKey) entrada.readObject();
+
+            // Generar clave AES compartida
             KeyAgreement keyAgreement = KeyAgreement.getInstance("DH");
             keyAgreement.init(keyPair.getPrivate());
             keyAgreement.doPhase(clavePublicaServidor, true);
 
-            // Generar la clave AES compartida
             byte[] claveCompartida = keyAgreement.generateSecret();
             SecretKey claveAES = new SecretKeySpec(claveCompartida, 0, 16, "AES");
 
-            // Paso 4: Enviar `idUsuario` e `idPaquete` al servidor
+            // Enviar datos de consulta al servidor
             salida.writeObject(idUsuario);
             salida.writeObject(idPaquete);
-            
-            // Paso 5: Recibir y descifrar el estado del paquete
-            byte[] estadoCifrado = (byte[]) entrada.readObject();
-            String estado = descifrarEstado(estadoCifrado, claveAES);
+            salida.flush();
 
-            if ("DESCONOCIDO".equals(estado)) {
-                System.out.println("Error en la consulta");
-            } else {
-                System.out.println("Estado del paquete: " + estado);
-            }
+            // Leer la respuesta cifrada del servidor como byte[]
+            byte[] respuestaCifrada = (byte[]) entrada.readObject();
+
+            // Configurar el IV (debe coincidir con el IV usado en el servidor)
+            IvParameterSpec iv = new IvParameterSpec(new byte[16]);  // Asegúrate de usar el mismo IV que el servidor
+
+            // Descifrar la respuesta
+            String respuesta = descifrarRespuesta(respuestaCifrada, claveAES, iv);
+            System.out.println("Respuesta del servidor: " + respuesta);
 
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    // Método para descifrar el estado del paquete
-    private static String descifrarEstado(byte[] estadoCifrado, SecretKey claveAES) throws Exception {
+    // Método para descifrar la respuesta usando AES
+    private String descifrarRespuesta(byte[] respuestaCifrada, SecretKey claveAES, IvParameterSpec iv) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-        cipher.init(Cipher.DECRYPT_MODE, claveAES);
-        byte[] estadoDescifrado = cipher.doFinal(estadoCifrado);
-        return new String(estadoDescifrado, "UTF-8");
+        cipher.init(Cipher.DECRYPT_MODE, claveAES, iv);
+        byte[] respuestaDescifrada = cipher.doFinal(respuestaCifrada);
+        return new String(respuestaDescifrada, "UTF-8");
+    }
+
+    public static void main(String[] args) {
+        if (args.length < 2) {
+            System.out.println("Uso: java src.Cliente <idUsuario> <idPaquete>");
+            return;
+        }
+        
+        String idUsuario = args[0];
+        String idPaquete = args[1];
+        
+        Cliente cliente = new Cliente(idUsuario, idPaquete);
+        cliente.run();
     }
 }
