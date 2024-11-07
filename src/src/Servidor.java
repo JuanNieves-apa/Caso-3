@@ -24,14 +24,14 @@ public class Servidor {
                 System.out.println("Seleccione una opción:");
                 System.out.println("1. Generar llaves asimétricas");
                 System.out.println("2. Iniciar servidor");
-                System.out.println("3. Iniciar servidor iterativo (Escenario 1)");
+               /*  System.out.println("3. Iniciar servidor iterativo (Escenario 1)");
                 System.out.println("4. Iniciar servidor concurrente (Escenario 2)");
-                System.out.println("5. Medir tiempos de cifrado (Simétrico y Asimétrico)");
+                System.out.println("5. Medir tiempos de cifrado (Simétrico y Asimétrico)"); */
                 int opcion = Integer.parseInt(br.readLine());
 
                 if (opcion == 1) {
                     generarLlavesAsimetricas();
-                    verificarLlavesGeneradas();
+                    //verificarLlavesGeneradas();
                 } else if (opcion == 2) {
                     cargarDatosPredefinidos();
                     iniciarServidor();

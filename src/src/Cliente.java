@@ -28,7 +28,7 @@ public class Cliente implements Runnable {
              ObjectOutputStream salida = new ObjectOutputStream(socket.getOutputStream());
              ObjectInputStream entrada = new ObjectInputStream(socket.getInputStream())) {
 
-            // Generación del par de claves DH y envío de la clave pública
+            // Generación del par de claves DH y envio de la clave pública
             KeyPairGenerator keyPairGen = KeyPairGenerator.getInstance("DH");
             keyPairGen.initialize(1024);
             KeyPair keyPair = keyPairGen.generateKeyPair();
@@ -80,16 +80,29 @@ public class Cliente implements Runnable {
             Cliente cliente = new Cliente(idUsuario, idPaquete);
             cliente.run();  // Realiza una solicitud al servidor
         }
+        System.out.println("Cliente ha completado las 32 consultas consecutivas.");
     }
 
     // Método para ejecutar el cliente en modo concurrente con múltiples delegados
     private static void ejecutarConsultasConcurrentes(String idUsuario, String idPaquete, int numDelegados) {
+        Thread[] delegados = new Thread[numDelegados];
         for (int i = 0; i < numDelegados; i++) {
-            new Thread(() -> {
+            delegados[i] = new Thread(() -> {
                 Cliente cliente = new Cliente(idUsuario, idPaquete);
                 cliente.run();
-            }).start();
+            });
+            delegados[i].start();
         }
+
+        // Espera a que todos los delegados terminen
+        for (Thread delegado : delegados) {
+            try {
+                delegado.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        System.out.println("Cliente ha completado las consultas concurrentes con " + numDelegados + " delegados.");
     }
 
     // Método main que interpreta los argumentos y ejecuta el escenario correspondiente
@@ -99,7 +112,7 @@ public class Cliente implements Runnable {
             System.out.println("Modo:");
             System.out.println("  32    -> Ejecuta 32 consultas consecutivas (iterativo)");
             System.out.println("  4, 8, 32 -> Número de delegados para consultas concurrentes (modo concurrente)");
-            System.out.println("Si no se especifica el modo, se ejecutará una sola consulta.");
+            System.out.println("Si no se especifica el modo, se ejecutara una sola consulta.");
             return;
         }
 
@@ -114,12 +127,13 @@ public class Cliente implements Runnable {
                 int numDelegados = Integer.parseInt(modo);
                 if (numDelegados == 1) {
                     new Cliente(idUsuario, idPaquete).run();  // Una sola consulta sin delegados
+                    System.out.println("Cliente ha completado la consulta unica.");
                 } else {
                     ejecutarConsultasConcurrentes(idUsuario, idPaquete, numDelegados);
                 }
             }
         } catch (NumberFormatException e) {
-            System.out.println("Modo inválido. Debe ser 32 para iterativo o un número para concurrente (1, 4, 8, o 32).");
+            System.out.println("Modo invalido. Debe ser 32 para iterativo o un número para concurrente (1, 4, 8, o 32).");
         }
     }
 }
