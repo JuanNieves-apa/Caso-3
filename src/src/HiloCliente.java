@@ -11,9 +11,8 @@ import java.net.Socket;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PublicKey;
-import java.util.Map;
 
-public class HiloCliente extends Thread {
+class HiloCliente extends Thread {
     private final Socket socket;
     private SecretKey claveAES;
 
@@ -26,35 +25,40 @@ public class HiloCliente extends Thread {
         try (ObjectInputStream entrada = new ObjectInputStream(socket.getInputStream());
              ObjectOutputStream salida = new ObjectOutputStream(socket.getOutputStream())) {
 
-            // Generación del par de claves DH y envío de la clave pública al cliente
+            // Medir tiempo para generar G, P y Gx (clave pública de Diffie-Hellman)
+            long tiempoInicioClave = System.nanoTime();
             KeyPairGenerator keyPairGen = KeyPairGenerator.getInstance("DH");
             keyPairGen.initialize(1024);
             KeyPair keyPair = keyPairGen.generateKeyPair();
-            salida.writeObject(keyPair.getPublic());  // Enviar clave pública del servidor
+            salida.writeObject(keyPair.getPublic());  // Enviar clave pública del servidor (Gx)
             salida.flush();
+            long tiempoFinClave = System.nanoTime();
+            System.out.println("Tiempo para generar G, P y Gx: " + (tiempoFinClave - tiempoInicioClave) + " ns");
 
-            // Recibir la clave pública del cliente
+            // Medir tiempo para responder el reto (generar clave compartida)
+            long tiempoInicioReto = System.nanoTime();
             PublicKey clavePublicaCliente = (PublicKey) entrada.readObject();
-
-            // Generar clave AES compartida
             KeyAgreement keyAgreement = KeyAgreement.getInstance("DH");
             keyAgreement.init(keyPair.getPrivate());
             keyAgreement.doPhase(clavePublicaCliente, true);
 
             byte[] claveCompartida = keyAgreement.generateSecret();
             claveAES = new SecretKeySpec(claveCompartida, 0, 16, "AES");
+            long tiempoFinReto = System.nanoTime();
+            System.out.println("Tiempo para responder el reto: " + (tiempoFinReto - tiempoInicioReto) + " ns");
 
-            // Leer idUsuario y idPaquete del cliente
+            // Medir tiempo para verificar la consulta
+            long tiempoInicioConsulta = System.nanoTime();
             String idUsuario = (String) entrada.readObject();
             String idPaquete = (String) entrada.readObject();
-
-            // Obtener el estado del paquete
             String estado = procesarConsulta(idUsuario, idPaquete);
+            long tiempoFinConsulta = System.nanoTime();
+            System.out.println("Tiempo para verificar la consulta: " + (tiempoFinConsulta - tiempoInicioConsulta) + " ns");
 
-            // Cifrar el estado del paquete
-            IvParameterSpec iv = new IvParameterSpec(new byte[16]); // IV de ejemplo (debería ser aleatorio)
+            // Enviar respuesta cifrada al cliente
+            IvParameterSpec iv = new IvParameterSpec(new byte[16]); // IV de ejemplo
             byte[] respuestaCifrada = cifrarEstado(estado, claveAES, iv);
-            salida.writeObject(respuestaCifrada);  // Enviar respuesta cifrada al cliente
+            salida.writeObject(respuestaCifrada);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -69,14 +73,14 @@ public class HiloCliente extends Thread {
 
     // Método para obtener el estado del paquete en función de idUsuario y idPaquete
     private String procesarConsulta(String idUsuario, String idPaquete) {
-        // Acceso a la tabla de usuarios en Servidor
         Usuario usuario = Servidor.usuarios.get(idUsuario);
         if (usuario != null && usuario.getPaquete().getIdPaquete().equals(idPaquete)) {
-            return usuario.getPaquete().estadoTexto(); // Retorna el estado como texto
+            return usuario.getPaquete().estadoTexto();
         }
-        return "DESCONOCIDO"; // Retorna "DESCONOCIDO" si no se encuentra el paquete
+        return "DESCONOCIDO";
     }
 
+    // Método para cifrar el estado del paquete usando AES
     private byte[] cifrarEstado(String estado, SecretKey claveAES, IvParameterSpec iv) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
         cipher.init(Cipher.ENCRYPT_MODE, claveAES, iv);

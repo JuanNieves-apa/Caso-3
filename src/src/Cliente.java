@@ -7,7 +7,6 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.math.BigInteger;
 import java.net.Socket;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -75,16 +74,52 @@ public class Cliente implements Runnable {
         return new String(respuestaDescifrada, "UTF-8");
     }
 
+    // Método para ejecutar el cliente en modo iterativo (32 consultas consecutivas)
+    private static void ejecutarConsultasIterativas(String idUsuario, String idPaquete) {
+        for (int i = 0; i < 32; i++) {
+            Cliente cliente = new Cliente(idUsuario, idPaquete);
+            cliente.run();  // Realiza una solicitud al servidor
+        }
+    }
+
+    // Método para ejecutar el cliente en modo concurrente con múltiples delegados
+    private static void ejecutarConsultasConcurrentes(String idUsuario, String idPaquete, int numDelegados) {
+        for (int i = 0; i < numDelegados; i++) {
+            new Thread(() -> {
+                Cliente cliente = new Cliente(idUsuario, idPaquete);
+                cliente.run();
+            }).start();
+        }
+    }
+
+    // Método main que interpreta los argumentos y ejecuta el escenario correspondiente
     public static void main(String[] args) {
         if (args.length < 2) {
-            System.out.println("Uso: java src.Cliente <idUsuario> <idPaquete>");
+            System.out.println("Uso: java Cliente <idUsuario> <idPaquete> [modo]");
+            System.out.println("Modo:");
+            System.out.println("  32    -> Ejecuta 32 consultas consecutivas (iterativo)");
+            System.out.println("  4, 8, 32 -> Número de delegados para consultas concurrentes (modo concurrente)");
+            System.out.println("Si no se especifica el modo, se ejecutará una sola consulta.");
             return;
         }
-        
+
         String idUsuario = args[0];
         String idPaquete = args[1];
-        
-        Cliente cliente = new Cliente(idUsuario, idPaquete);
-        cliente.run();
+        String modo = args.length > 2 ? args[2] : "1";  // Valor predeterminado de 1 para una consulta única
+
+        try {
+            if (modo.equals("32")) {
+                ejecutarConsultasIterativas(idUsuario, idPaquete);
+            } else {
+                int numDelegados = Integer.parseInt(modo);
+                if (numDelegados == 1) {
+                    new Cliente(idUsuario, idPaquete).run();  // Una sola consulta sin delegados
+                } else {
+                    ejecutarConsultasConcurrentes(idUsuario, idPaquete, numDelegados);
+                }
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Modo inválido. Debe ser 32 para iterativo o un número para concurrente (1, 4, 8, o 32).");
+        }
     }
 }
