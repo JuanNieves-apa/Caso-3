@@ -1,30 +1,20 @@
 package src;
 
 import java.io.*;
-import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
-import java.net.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.util.HashMap;
 import java.util.Map;
-import java.security.*;
 
 public class Servidor {
     static final Map<String, Usuario> usuarios = new HashMap<>(); // Tabla predefinida de usuarios y paquetes
 
     public static void main(String[] args) {
-        cargarDatosPredefinidos();
         mostrarMenu();
-    }
-
-    private static void cargarDatosPredefinidos() {
-        // Crear 32 usuarios para cumplir con el enunciado
-        for (int i = 1; i <= 32; i++) {
-            String idUsuario = "user" + i;
-            String idPaquete = "pkg" + i;
-            int estado = (i % 6) + 1;  // Asigna un estado numérico entre 1 y 6
-            usuarios.put(idUsuario, new Usuario(idUsuario, new Paquete(idPaquete, estado)));
-        }
     }
 
     private static void mostrarMenu() {
@@ -38,6 +28,7 @@ public class Servidor {
                 if (opcion == 1) {
                     generarLlavesAsimetricas();
                 } else if (opcion == 2) {
+                    cargarDatosPredefinidos();  // Cargar datos antes de iniciar el servidor
                     iniciarServidor();
                 } else {
                     System.out.println("Opción no válida");
@@ -68,19 +59,26 @@ public class Servidor {
         }
     }
 
-    private static byte[] cifrarEstado(String estado, SecretKey claveAES, IvParameterSpec iv) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-        cipher.init(Cipher.ENCRYPT_MODE, claveAES, iv);
-        return cipher.doFinal(estado.getBytes("UTF-8"));
+    private static void cargarDatosPredefinidos() {
+        // Crear 32 usuarios para cumplir con el enunciado
+        for (int i = 1; i <= 32; i++) {
+            String idUsuario = "user" + i;
+            String idPaquete = "pkg" + i;
+            int estado = (i % 6) + 1;  // Asigna un estado numérico entre 1 y 6
+            usuarios.put(idUsuario, new Usuario(idUsuario, new Paquete(idPaquete, estado)));
+        }
+        System.out.println("Datos predefinidos cargados.");
     }
 
-    private static void iniciarServidor() {
-        // Aquí se inicia el servidor concurrente que crea un hilo para cada cliente
+    public static void iniciarServidor() {
         try (ServerSocket serverSocket = new ServerSocket(12345)) {
             System.out.println("Servidor iniciado en el puerto 12345");
 
             while (true) {
                 Socket socketCliente = serverSocket.accept();
+                System.out.println("Cliente conectado");
+                
+                // Crear un nuevo hilo para manejar cada cliente
                 new HiloCliente(socketCliente).start();
             }
         } catch (IOException e) {

@@ -11,8 +11,9 @@ import java.net.Socket;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PublicKey;
+import java.util.Map;
 
-class HiloCliente extends Thread {
+public class HiloCliente extends Thread {
     private final Socket socket;
     private SecretKey claveAES;
 
@@ -43,15 +44,37 @@ class HiloCliente extends Thread {
             byte[] claveCompartida = keyAgreement.generateSecret();
             claveAES = new SecretKeySpec(claveCompartida, 0, 16, "AES");
 
-            // Cifrar estado del paquete
-            String estado = "ENOFICINA";  // Ejemplo de estado
-            IvParameterSpec iv = new IvParameterSpec(new byte[16]); // IV de ejemplo (debería ser aleatorio)
+            // Leer idUsuario y idPaquete del cliente
+            String idUsuario = (String) entrada.readObject();
+            String idPaquete = (String) entrada.readObject();
 
+            // Obtener el estado del paquete
+            String estado = procesarConsulta(idUsuario, idPaquete);
+
+            // Cifrar el estado del paquete
+            IvParameterSpec iv = new IvParameterSpec(new byte[16]); // IV de ejemplo (debería ser aleatorio)
             byte[] respuestaCifrada = cifrarEstado(estado, claveAES, iv);
-            salida.writeObject(respuestaCifrada);
+            salida.writeObject(respuestaCifrada);  // Enviar respuesta cifrada al cliente
+
         } catch (Exception e) {
             e.printStackTrace();
+        } finally {
+            try {
+                socket.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
+    }
+
+    // Método para obtener el estado del paquete en función de idUsuario y idPaquete
+    private String procesarConsulta(String idUsuario, String idPaquete) {
+        // Acceso a la tabla de usuarios en Servidor
+        Usuario usuario = Servidor.usuarios.get(idUsuario);
+        if (usuario != null && usuario.getPaquete().getIdPaquete().equals(idPaquete)) {
+            return usuario.getPaquete().estadoTexto(); // Retorna el estado como texto
+        }
+        return "DESCONOCIDO"; // Retorna "DESCONOCIDO" si no se encuentra el paquete
     }
 
     private byte[] cifrarEstado(String estado, SecretKey claveAES, IvParameterSpec iv) throws Exception {
